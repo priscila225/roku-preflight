@@ -45,8 +45,8 @@ PASS  Legacy screens              No sunset legacy screen components were found
 PASS  Deprecated APIs             No documented deprecated APIs were found. InitClientCertificates() becomes a blocking error on Apr 1, 2027
 PASS  Launch beacon               AppLaunchComplete is signaled in source. This does not measure launch time (official criterion is 15 seconds to a fully rendered home screen)
 PASS  Memory Monitor              roAppMemoryMonitor is used (required since Oct 1, 2026)
-SKIP  Roku Advertising Framework  not used
-SKIP  Roku Pay                    not used
+SKIP  Roku Advertising Framework  Not used
+SKIP  Roku Pay                    Not used
 SKIP  Screensaver manifest        Not a standalone screensaver
 
 Checked fully offline. Nothing left this machine.
@@ -128,6 +128,18 @@ jobs:
 Everything runs on your machine. Your manifest, sources, artwork and zip are never uploaded.
 
 The only network call is a GET on `https://devbooth.dev/api/roku-rules` for the current dates and sizes. That request sends nothing about your project. `--offline` skips the network completely and uses the dates bundled in this release.
+
+## Development
+
+```bash
+git clone https://github.com/priscila225/roku-preflight.git
+cd roku-preflight
+npm install
+npm test
+npx roku-preflight check path/to/channel
+```
+
+Requires Node 18 or newer. `dist/` is built by `npm test` and is not committed.
 
 ## License
 

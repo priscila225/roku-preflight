@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Vendored detection now covers vendor-named SDK folders under `source/` (for example `source/ExampleVendorSDK/`), plus conservative third-party license or copyright headers and minified-looking `.brs` files.
+- A bare artwork location of `manifest` is printed as `in manifest`.
+- SKIP reasons use sentence case (`Not used`).
+- In `--verbose`, PASS locations are collapsed to one line per file, as `file (N matches)`.
 - A missing FHD focus icon (`mm_icon_focus_fhd`) is a recommended warning on the artwork check only. Manifest-required no longer reports icon or splash fields, so the same gap is not listed twice. HD icons and FHD/HD splash screens are still required.
 - Roku Pay only warns when it finds purchase calls (`doOrder`, `getCatalog`, `getPurchases`, or similar ChannelStore commands) without `doRecovery`, and it always prints `file:line` locations. ChannelStore used only for `getUserData` or account linking, and bare "subscription" wording, no longer trigger the check.
 - Deprecated APIs and sunset screens found only in vendored or third-party code (folders such as `vendor/`, `libs/`, `lib/`, `third_party/`, `sdk/`, or `components/*sdk*`) are warnings, with a hint to update the vendor SDK.

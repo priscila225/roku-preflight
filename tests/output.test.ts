@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CHECK_IDS } from "../src/preflight/rules.ts";
+import { formatLocation, formatPassLocations, formatCheckText } from "../src/preflight/output.ts";
 import { fixture, runJson, runText } from "./helpers/run.ts";
+import type { CheckResult } from "../src/preflight/checks.ts";
 
 function statusLines(out: string): string[] {
   return out.split("\n").filter((l) => /^(PASS|WARN|FAIL|SKIP|INFO)  /.test(l));
@@ -28,8 +30,8 @@ test("ready-channel default output: compact PASS, one SKIP line each, no pass li
   const skips = statusLines(out).filter((l) => l.startsWith("SKIP  "));
   assert.equal(skips.length, 3, out);
   assert.ok(skips.every((l) => /SKIP  \S.*  \S/.test(l)), skips.join("\n"));
-  assert.ok(skips.some((l) => /Roku Advertising Framework\s+not used/.test(l)), out);
-  assert.ok(skips.some((l) => /Roku Pay\s+not used/.test(l)), out);
+  assert.ok(skips.some((l) => /Roku Advertising Framework\s+Not used/.test(l)), out);
+  assert.ok(skips.some((l) => /Roku Pay\s+Not used/.test(l)), out);
   assert.ok(skips.some((l) => /Screensaver manifest\s+Not a standalone screensaver/.test(l)), out);
   for (const s of skips) {
     const idx = lines.indexOf(s);
@@ -135,3 +137,50 @@ test("hd-icons-vendored reports the missing FHD icon and vendored API once each,
   assert.match(loc!, /^      vendor\/example-sdk\/http\.brs:\d+$/);
 });
 
+
+test("manifest locations are printed as 'in manifest'", () => {
+  assert.equal(formatLocation({ file: "manifest" }), "in manifest");
+  assert.equal(formatLocation({ file: "manifest", line: 4 }), "in manifest:4");
+  assert.equal(formatLocation({ file: "source/main.brs", line: 3 }), "source/main.brs:3");
+});
+
+test("verbose PASS locations collapse to one line per file", () => {
+  const pass: CheckResult = {
+    id: "memory-monitor",
+    status: "pass",
+    title: "Memory Monitor",
+    detail: "roAppMemoryMonitor is used",
+    deadline: null,
+    source: "https://example.com",
+    link: "https://devbooth.dev/rules/roku-memory-monitor",
+    items: [],
+    locations: [
+      { file: "source/main.brs", line: 4, message: "a" },
+      { file: "source/main.brs", line: 10, message: "b" },
+      { file: "source/util.brs", line: 2, message: "c" },
+    ],
+  };
+  assert.deepEqual(formatPassLocations(pass.locations!), [
+    "source/main.brs (2 matches)",
+    "source/util.brs (1 match)",
+  ]);
+  const out = formatCheckText({
+    header: { kind: "project", input: "app", title: "Example Channel", version: "1.0.0", rsgVersion: "1.3" },
+    results: [pass],
+    counts: { pass: 1, warn: 0, fail: 0, skip: 0, info: 0 },
+    notes: [],
+    privacy: { offline: true },
+    color: false,
+    verbose: true,
+    repeatSummary: false,
+  });
+  assert.match(out, /source\/main\.brs \(2 matches\)/);
+  assert.match(out, /source\/util\.brs \(1 match\)/);
+  assert.doesNotMatch(out, /source\/main\.brs:4/);
+});
+
+test("hd-icons-vendored prints the missing FHD icon as in manifest", async () => {
+  const { out } = await runText([fixture("hd-icons-vendored"), "--offline", "--no-color", "--only", "artwork"]);
+  assert.match(out, /^      in manifest$/m);
+  assert.doesNotMatch(out, /^      manifest$/m);
+});

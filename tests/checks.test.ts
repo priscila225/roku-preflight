@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtemp, cp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, cp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
@@ -175,6 +175,85 @@ test("a project over the 4 MB cap fails package-size", async () => {
     const check = byId(json)["package-size"]!;
     assert.equal(check.status, "fail");
     assert.match(check.detail, /4 MB/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+const INIT_CLIENT = `' Example vendor HTTP helper
+sub HttpInit()
+    InitClientCertificates()
+end sub
+`
+
+test("vendor-named SDK folders under source/ are treated as vendored", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "roku-preflight-vendorsdk-"));
+  try {
+    await cp(fixture("ready-channel"), dir, { recursive: true });
+    await mkdir(join(dir, "source", "ExampleVendorSDK"), { recursive: true });
+    await writeFile(join(dir, "source", "ExampleVendorSDK", "http.brs"), INIT_CLIENT);
+    const { json, exitCode } = await runJson([dir, "--offline", "--only", "deprecated-apis"]);
+    assert.equal(exitCode, 0);
+    const check = byId(json)["deprecated-apis"]!;
+    assert.equal(check.status, "warn");
+    assert.match(check.detail, /vendored/i);
+    assert.ok(check.locations?.some((l) => l.file.includes("ExampleVendorSDK")));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a third-party header or minified BrightScript file is treated as vendored", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "roku-preflight-vendorhdr-"));
+  try {
+    await cp(fixture("ready-channel"), dir, { recursive: true });
+    await writeFile(
+      join(dir, "source", "http.brs"),
+      `' Third-party library. Copyright 2024 Example Vendor.
+sub HttpInit()
+    InitClientCertificates()
+end sub
+`,
+    );
+    const header = await runJson([dir, "--offline", "--only", "deprecated-apis"]);
+    assert.equal(header.exitCode, 0);
+    const headerCheck = byId(header.json)["deprecated-apis"]!;
+    assert.equal(headerCheck.status, "warn");
+    assert.match(headerCheck.detail, /vendored/i);
+    assert.ok(headerCheck.locations?.some((l) => l.file.endsWith("source/http.brs")));
+
+    await writeFile(
+      join(dir, "source", "http.brs"),
+      "sub HttpInit():" + "x=1:".repeat(200) + "InitClientCertificates():end sub\n",
+    );
+    const minified = await runJson([dir, "--offline", "--only", "deprecated-apis"]);
+    assert.equal(minified.exitCode, 0);
+    const minCheck = byId(minified.json)["deprecated-apis"]!;
+    assert.equal(minCheck.status, "warn");
+    assert.match(minCheck.detail, /vendored/i);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a generic app copyright header is not treated as vendored", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "roku-preflight-appcopy-"));
+  try {
+    await cp(fixture("ready-channel"), dir, { recursive: true });
+    await writeFile(
+      join(dir, "source", "certs.brs"),
+      `' Copyright 2026 Example Corp.
+sub Setup()
+    InitClientCertificates()
+end sub
+`,
+    );
+    const { json, exitCode } = await runJson([dir, "--offline", "--only", "deprecated-apis"]);
+    assert.equal(exitCode, 0);
+    const check = byId(json)["deprecated-apis"]!;
+    assert.equal(check.status, "warn");
+    assert.doesNotMatch(check.detail, /vendored/i);
+    assert.match(check.detail, /InitClientCertificates/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

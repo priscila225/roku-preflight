@@ -1,7 +1,7 @@
 import { RULES, fmtDate, type CheckId } from "./rules";
 import { pkgPath, formatVersion, isAllZeroVersion, manifestGet, type ManifestInfo } from "./manifest";
 import { readImage, formatSize } from "./image";
-import { findMainEntries, findMainWithoutArgs, hasMatch, searchSources, at, isVendoredPath, type SourceHit, type TextFile } from "./source";
+import { findMainEntries, findMainWithoutArgs, hasMatch, searchSources, at, isVendoredFile, type SourceHit, type TextFile } from "./source";
 import type { ProjectScan } from "./project";
 import type { ResolvedRokuRules, RokuRulesChecks } from "./roku-rules";
 import { isoCmp, isoDay } from "./roku-rules";
@@ -67,10 +67,11 @@ function itemHits(hits: SourceHit[], cap = 8): string[] {
   return shown;
 }
 
-function partitionHits(hits: SourceHit[]): { app: SourceHit[]; vendor: SourceHit[] } {
+function partitionHits(hits: SourceHit[], sources: TextFile[] = []): { app: SourceHit[]; vendor: SourceHit[] } {
+  const contents = new Map(sources.map((s) => [s.path, s.content]));
   const app: SourceHit[] = [];
   const vendor: SourceHit[] = [];
-  for (const h of hits) (isVendoredPath(h.file) ? vendor : app).push(h);
+  for (const h of hits) (isVendoredFile(h.file, contents.get(h.file)) ? vendor : app).push(h);
   return { app, vendor };
 }
 
@@ -365,7 +366,7 @@ function checkLegacyScreens(ctx: CheckContext): CheckResult {
   if (!real.length) {
     return result("deprecated-legacy-screens", "pass", "No sunset legacy screen components were found");
   }
-  const { app, vendor } = partitionHits(real);
+  const { app, vendor } = partitionHits(real, ctx.project.sources);
   const nameOf = (h: SourceHit) => (h.excerpt.match(re) ?? [])[1] ?? "legacy component";
   const items: string[] = [];
   const locations: CheckLocation[] = [];
@@ -411,7 +412,7 @@ function checkDeprecatedApis(ctx: CheckContext): CheckResult {
   for (const dep of DEPRECATED) {
     const hits = searchSources(ctx.project.sources, dep.pattern);
     if (!hits.length) continue;
-    const { app, vendor } = partitionHits(hits);
+    const { app, vendor } = partitionHits(hits, ctx.project.sources);
     if (vendor.length) {
       items.push(vendoredItem(dep.id));
       locations.push(...locsFromHits(vendor, `${dep.id} in vendored code`));
@@ -511,7 +512,7 @@ function checkRaf(ctx: CheckContext): CheckResult {
   const m = ctx.project.manifest;
   const hinted = hasMatch(sources, AD_HINT_RE) || (manifestGet(m, "bs_libs_required") ?? "").toLowerCase().includes("roku_ads_lib");
   if (!hinted) {
-    return result("raf", "skip", "not used");
+    return result("raf", "skip", "Not used");
   }
   const items: string[] = [];
   const locations: CheckLocation[] = [];
@@ -567,7 +568,7 @@ function checkRokuPay(ctx: CheckContext): CheckResult {
   // ChannelStore used only for getUserData / account linking, or a bare "subscription"
   // string in analytics or marketing copy, is not a purchase flow.
   if (!purchaseHits.length) {
-    return result("roku-pay", "skip", "not used");
+    return result("roku-pay", "skip", "Not used");
   }
   const recoveryHits = searchSources(sources, DO_RECOVERY_RE);
   const locations = [

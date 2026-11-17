@@ -28,26 +28,62 @@ const VENDOR_DIRS = new Set([
   "3rd_party",
 ]);
 
+const VENDOR_NAME_RE = /sdk|vendor|third_party|third-party|thirdparty/i;
+
+function baseName(segment: string): string {
+  return segment.replace(/\.(brs|bs|xml)$/i, "");
+}
+
 /** A path segment that looks like a vendor SDK folder or component (e.g. ExampleAnalyticsSdk, foo-sdk). */
 function looksLikeSdkName(segment: string): boolean {
-  const base = segment.replace(/\.(brs|bs|xml)$/i, "");
+  const base = baseName(segment);
   return /(^|[._-])sdk([._-]|$)/i.test(base) || /sdk$/i.test(base);
 }
 
-/** True when a hit is in third-party or vendor code, not the app's own source. */
+function pathParts(path: string): string[] {
+  return path.replace(/\\/g, "/").split("/").filter(Boolean);
+}
+
+/** True when a path looks vendored: known vendor folders, or any folder or file name
+ * containing sdk, vendor, thirdparty or third_party, at any depth. */
 export function isVendoredPath(path: string): boolean {
-  const parts = path.replace(/\\/g, "/").split("/").filter(Boolean);
+  const parts = pathParts(path);
   if (!parts.length) return false;
-  const dirs = parts.slice(0, -1);
-  for (const dir of dirs) {
-    if (VENDOR_DIRS.has(dir.toLowerCase())) return true;
-    if (looksLikeSdkName(dir)) return true;
-  }
-  const componentsAt = parts.findIndex((p) => p.toLowerCase() === "components");
-  if (componentsAt >= 0) {
-    return parts.slice(componentsAt + 1).some(looksLikeSdkName);
+  for (const part of parts) {
+    const base = baseName(part);
+    if (VENDOR_DIRS.has(base.toLowerCase())) return true;
+    if (VENDOR_NAME_RE.test(base)) return true;
+    if (looksLikeSdkName(base)) return true;
   }
   return false;
+}
+
+/** A conservative third-party license or copyright header, not a generic app copyright. */
+export function hasThirdPartyHeader(content: string): boolean {
+  const header = content.split(/\r?\n/).slice(0, 40).join("\n");
+  if (/\bthird[ _-]?party\b/i.test(header)) return true;
+  if (/\bvendored\b|\bvendor\s+sdk\b/i.test(header)) return true;
+  if (/\boriginally\s+(written|published|released|from)\b/i.test(header)) return true;
+  return false;
+}
+
+/** Dense or very long-line BrightScript, typical of a minified or bundled vendor file. */
+export function isMinifiedBrs(path: string, content: string): boolean {
+  if (!/\.(brs|bs)$/i.test(path) || !content) return false;
+  const lines = content.split(/\r?\n/);
+  if (lines.some((l) => l.length >= 400)) return true;
+  const nonempty = lines.filter((l) => l.trim());
+  if (nonempty.length >= 3 && nonempty.filter((l) => l.length >= 200).length / nonempty.length >= 0.8) {
+    return true;
+  }
+  return false;
+}
+
+/** Path, third-party header, or minified BrightScript. */
+export function isVendoredFile(path: string, content?: string): boolean {
+  if (isVendoredPath(path)) return true;
+  if (content === undefined) return false;
+  return hasThirdPartyHeader(content) || isMinifiedBrs(path, content);
 }
 
 export function isSourcePath(path: string): boolean {

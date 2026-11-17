@@ -10,14 +10,13 @@
     "certification",
     "cli"
   ],
-  "homepage": "https://devbooth.dev",
+  "homepage": "https://github.com/priscila225/roku-preflight",
   "bugs": {
-    "url": "https://github.com/priscila225/16kb-check/issues"
+    "url": "https://github.com/priscila225/roku-preflight/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/priscila225/16kb-check.git",
-    "directory": "packages/roku-preflight"
+    "url": "git+https://github.com/priscila225/roku-preflight.git"
   },
   "license": "MIT",
   "author": "Priscila Apocalypse",

@@ -51,8 +51,26 @@ function titleWidth(results: CheckResult[]): number {
   return Math.max(...results.map((r) => r.title.length), 10) + 2;
 }
 
+function isManifestFile(file: string): boolean {
+  const base = file.replace(/\\/g, "/").split("/").pop() ?? file;
+  return base === "manifest";
+}
+
 export function formatLocation(loc: { file: string; line?: number }): string {
+  if (isManifestFile(loc.file)) {
+    return loc.line !== undefined ? `in manifest:${loc.line}` : "in manifest";
+  }
   return loc.line !== undefined ? `${loc.file}:${loc.line}` : loc.file;
+}
+
+/** For verbose PASS checks: one line per file, with a match count. */
+export function formatPassLocations(locations: { file: string; line?: number }[]): string[] {
+  const counts = new Map<string, number>();
+  for (const loc of locations) {
+    const file = isManifestFile(loc.file) ? "manifest" : loc.file.replace(/\\/g, "/");
+    counts.set(file, (counts.get(file) ?? 0) + 1);
+  }
+  return [...counts.entries()].map(([file, n]) => `${file} (${n} ${n === 1 ? "match" : "matches"})`);
 }
 
 function sameFinding(detail: string, item: string): boolean {
@@ -72,7 +90,8 @@ function writeCheck(lines: string[], r: CheckResult, titleW: number, color: bool
   lines.push(`${paint(color, COLOR[r.status], LABEL[r.status])}  ${r.title.padEnd(titleW)}${r.detail}`);
   for (const item of displayItems(r, verbose)) lines.push(`      - ${item}`);
   if (r.locations?.length) {
-    for (const loc of r.locations) lines.push(`      ${formatLocation(loc)}`);
+    const locLines = verbose && r.status === "pass" ? formatPassLocations(r.locations) : r.locations.map(formatLocation);
+    for (const line of locLines) lines.push(`      ${line}`);
   }
   if (showLinks) {
     lines.push(paint(color, "90", `      Rule: ${r.source}`));
